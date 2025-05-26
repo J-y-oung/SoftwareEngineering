@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.jy.softwareengineering.Mapper.RoomMapper">
+<!--这里后续确定完房间的所有属性字段后再修改-->
+    <update id="update">
+        UPDATE room
+        <set>
+            <!-- 空调开关 -->
+            <if test="acOn != null">ac_on = #{acOn},</if>
+            <!-- 入住/退房时间 -->
+            <if test="checkinTime != null">checkin_time = #{checkinTime},</if>
+            <if test="checkoutTime != null">checkout_time = #{checkoutTime},</if>
+            <!-- 温度参数 -->
+            <if test="currentTemp != null">current_temp = #{currentTemp},</if>
+            <if test="targetTemp != null">target_temp = #{targetTemp},</if>
+            <if test="targetTemp == null">target_temp = null,</if>
+            <if test="defaultTemp != null">default_temp = #{defaultTemp},</if>
+            <!-- 模式与风扇速度 -->
+            <if test="mode != null">mode = #{mode},</if>
+            <if test="fanSpeed != null">fan_speed = #{fanSpeed},</if>
+            <!-- 房间价格 -->
+            <if test="price != null">price = #{price}</if>
+        </set>
+        WHERE room_id = #{roomId}
+    </update>
+
+
+    <select id="selectById" resultType="com.jy.softwareengineering.Pojo.Room">
+        select * from room where room_id = #{roomId}
+    </select>
+</mapper>

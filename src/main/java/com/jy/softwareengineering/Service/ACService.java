@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.ScheduledFuture;
 
+
 @Service
 public class ACService {
 
@@ -23,6 +24,7 @@ public class ACService {
         room.setAcOn(true);
         room.setMode(1);
         room.setFanSpeed(1);
+        room.setCurrentTemp(22.0);
         room.setTargetTemp(22.0);
         set(room);
         return "开机成功";
@@ -31,6 +33,8 @@ public class ACService {
     public String set(Room room){
         if(!checkParams(room))
             return "参数错误,请确保传递参数合法";
+        if(!Boolean.TRUE.equals(room.getAcOn())  || (room.getCheckinTime() == null))
+            return "未入住、未启动情况下禁止操控空调";
         roomMapper.update(room);
         acSchedulerService.addTask(new RoomTempTask(room.getRoomId(), room.getMode(), room.getFanSpeed()));
         return "设置成功";

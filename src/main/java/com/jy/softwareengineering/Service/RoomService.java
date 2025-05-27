@@ -28,7 +28,10 @@ public class RoomService {
         Room room = selectById(roomId);
         room.setCheckoutTime(time);
         System.out.println(room);
+//        退房后设置入住、离店、费用数据为null，便于set判断
         room.setPrice(0.0);
+        room.setCheckinTime(null);
+        room.setCheckoutTime(null);
         roomMapper.update(room);
         return "退房成功";
     }

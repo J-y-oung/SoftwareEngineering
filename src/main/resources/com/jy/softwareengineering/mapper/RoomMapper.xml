@@ -12,7 +12,9 @@
             <if test="acOn != null">ac_on = #{acOn},</if>
             <!-- 入住/退房时间 -->
             <if test="checkinTime != null">checkin_time = #{checkinTime},</if>
+            <if test="checkinTime == null">checkin_time = null,</if>
             <if test="checkoutTime != null">checkout_time = #{checkoutTime},</if>
+            <if test="checkoutTime == null">checkout_time = null,</if>
             <!-- 温度参数 -->
             <if test="currentTemp != null">current_temp = #{currentTemp},</if>
             <if test="targetTemp != null">target_temp = #{targetTemp},</if>

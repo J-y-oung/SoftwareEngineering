@@ -1,16 +1,25 @@
 package com.jy.softwareengineering.Service;
 
 import com.jy.softwareengineering.Mapper.RoomMapper;
+import com.jy.softwareengineering.Pojo.ExcelExporter;
 import com.jy.softwareengineering.Pojo.Room;
+import com.jy.softwareengineering.Pojo.UsageDetailItem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 
 
 @Service
 public class ACService {
-
+//    这是为了生成详单记录，每次调用set就向usageHistoryMap中添加一条记录
+    private final Map<Integer, UsageDetailItem> currentUsageMap = new ConcurrentHashMap<>();
+    private final Map<Integer, List<UsageDetailItem>> usageHistoryMap = new ConcurrentHashMap<>();
     @Autowired
     private RoomService roomService;
     @Autowired
@@ -26,19 +35,67 @@ public class ACService {
         room.setFanSpeed(1);
         room.setCurrentTemp(22.0);
         room.setTargetTemp(22.0);
+        roomMapper.update(room);
         set(room);
         return "开机成功";
     }
 //    先检查参数是否在老师提供的表格范围内，参数合法就将任务加入线程池
-    public String set(Room room){
-        if(!checkParams(room))
-            return "参数错误,请确保传递参数合法";
-        if(!Boolean.TRUE.equals(room.getAcOn())  || (room.getCheckinTime() == null))
-            return "未入住、未启动情况下禁止操控空调";
-        roomMapper.update(room);
-        acSchedulerService.addTask(new RoomTempTask(room.getRoomId(), room.getMode(), room.getFanSpeed()));
-        return "设置成功";
+public String set(Room room) {
+    //之前有bug，因为传递的room只有四项信息，所以要重新从数据库中获取，并且区分两个room，如果有不合法操作则直接return。
+    // oldroom中的数据在执行完所有操作后才被更新到数据库中
+
+    // 更新：先从数据库中读取当前房间完整信息
+    Room oldRoom = roomService.selectById(room.getRoomId());
+    if (oldRoom == null) {
+        return "房间不存在";
     }
+    // 更新oldRoom的字段，但是oldroom只是一个暂存的room，用以检测和执行后续逻辑
+    if (room.getTargetTemp() != null) oldRoom.setTargetTemp(room.getTargetTemp());
+    if (room.getMode() != null) oldRoom.setMode(room.getMode());
+    if (room.getFanSpeed() != null) oldRoom.setFanSpeed(room.getFanSpeed());
+
+    // 参数检测
+    if (!checkParams(oldRoom)) {
+        return "参数错误，请确保传递参数合法";
+    }
+
+    // 空调未开 或 未入住不允许设置
+    if (!Boolean.TRUE.equals(oldRoom.getAcOn()) || oldRoom.getCheckinTime() == null) {
+        return "未入住或空调未开启，禁止操控空调";
+    }
+
+    // 记录上一段使用详情
+    UsageDetailItem currentItem = currentUsageMap.get(oldRoom.getRoomId());
+    if (currentItem != null) {
+        currentItem.setEndTime(LocalDateTime.now());
+        currentItem.setEndTemp(oldRoom.getCurrentTemp());
+//        一度一元，直接用delta来计算价格，因为delta是绝对值，所以不用再判断是加还是减
+        double delta = Math.abs(currentItem.getEndTemp() - currentItem.getStartTemp());
+        currentItem.setPrice(delta);
+
+        usageHistoryMap.computeIfAbsent(oldRoom.getRoomId(), k -> new ArrayList<>()).add(currentItem);
+    }
+
+    // 开始记录新的使用详情项
+    UsageDetailItem newItem = new UsageDetailItem();
+    newItem.setRoomId(oldRoom.getRoomId());
+    newItem.setMode(oldRoom.getMode());
+    newItem.setFanSpeed(oldRoom.getFanSpeed());
+    newItem.setStartTime(LocalDateTime.now());
+    newItem.setStartTemp(oldRoom.getCurrentTemp());
+
+    currentUsageMap.put(oldRoom.getRoomId(), newItem);
+    roomMapper.update(oldRoom);
+    // 更新后再启动调度任务
+    acSchedulerService.addTask(new RoomTempTask(
+            oldRoom.getRoomId(),
+            oldRoom.getMode(),
+            oldRoom.getFanSpeed()
+    ));
+
+    return "设置成功";
+}
+
     public String powerOff(Integer roomId)
     {
         Room room = roomService.selectById(roomId);
@@ -49,6 +106,18 @@ public class ACService {
         room.setTargetTemp(null);
         roomMapper.update(room);
         acSchedulerService.addTask(new RoomTempTask(room.getRoomId(), room.getMode(), room.getFanSpeed()));
+        UsageDetailItem item = currentUsageMap.remove(roomId);
+        if (item != null) {
+            item.setEndTime(LocalDateTime.now());
+            item.setEndTemp(room.getCurrentTemp());
+            double delta = Math.abs(item.getEndTemp() - item.getStartTemp());
+            item.setPrice(delta);
+            usageHistoryMap.computeIfAbsent(roomId, k -> new ArrayList<>()).add(item);
+        }
+        List<UsageDetailItem> history = usageHistoryMap.remove(roomId);
+        if (history != null && !history.isEmpty()) {
+            ExcelExporter.exportUsageDetail(roomId, history);
+        }
         return "关机成功";
     }
 //    这是一个内部类，继承Runnable接口，用于实现定时任务

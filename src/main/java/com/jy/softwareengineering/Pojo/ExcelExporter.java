@@ -51,6 +51,31 @@ public class ExcelExporter {
             e.printStackTrace();
         }
     }
+    public static void exportBillToExcel(List<BillItem> billList, String filePath) throws IOException {
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("账单");
+
+        // 标题行
+        Row header = sheet.createRow(0);
+        header.createCell(0).setCellValue("房间号");
+        header.createCell(1).setCellValue("入住时间");
+        header.createCell(2).setCellValue("退房时间");
+        header.createCell(3).setCellValue("总费用");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        // 内容行
+        for (int i = 0; i < billList.size(); i++) {
+            BillItem item = billList.get(i);
+            Row row = sheet.createRow(i + 1);
+            row.createCell(0).setCellValue(item.getRoomId());
+            row.createCell(1).setCellValue(item.getCheckinTime().format(formatter));
+            row.createCell(2).setCellValue(item.getCheckoutTime().format(formatter));
+            row.createCell(3).setCellValue(item.getTotalPrice());
+        }
+        try (FileOutputStream fos = new FileOutputStream(filePath)) {
+            workbook.write(fos);
+        }
+        workbook.close();
+    }
 
     private static String getFanSpeedText(int speed) {
         return switch (speed) {
